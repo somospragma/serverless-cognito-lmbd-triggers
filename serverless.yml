@@ -1,0 +1,74 @@
+service: lambda-authorizing-api-gateway
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  memorySize: 512
+  timeout: 15 
+  lambdaHashingVersion: 20201221
+  versionFunctions: true
+  architecture: x86_64
+  deploymentBucket:
+    name: api-va-el-bucket-name
+    maxPreviousDeploymentArtifacts: 10
+    blockPublicAccess: true
+    versioning: true
+    serverSideEncryption: AES256
+  environment:
+    auditTable: UserSession
+    clientId: aqui-va-el-clientid-cognito
+    userPoolId: aqui-va-el-userpoolid-cognito
+    sessionTimeOutSeconds: 600
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+      Resource: "arn:aws:dynamodb:us-east-1:${idawsCount}:table/UserSession"  
+
+package:
+  patterns:
+    - src/**
+  individually: true
+  excludeDevDependencies: true
+
+functions:
+  preCognitoAuthentication:
+    name: sls-pre-cognito-authentication-dev
+    handler: src/lambdas/pre-cognito-authentication.handler
+  preTokenGenerator:
+    name: sls-pre-cognito-token-generator-dev
+    handler: src/lambdas/pre-cognito-token-generator.handler
+  postCognitoAuthentication:
+    name: sls-post-cognito-authentication-dev
+    handler: src/lambdas/post-cognito-authentication.handler   
+
+resources: # CloudFormation template syntax from here on.
+  Resources:
+    usersTable:
+      Type: AWS::DynamoDB::Table
+      UpdateReplacePolicy: Delete
+      Properties:
+        TableName: UserSession
+        AttributeDefinitions: 
+          - AttributeName: ClientId
+            AttributeType: S
+          - AttributeName: UserName
+            AttributeType: S 
+        TableClass: STANDARD   
+        BillingMode: PROVISIONED 
+        KeySchema:
+          - AttributeName: ClientId
+            KeyType: HASH
+          - AttributeName: UserName
+            KeyType: RANGE  
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
+        TimeToLiveSpecification:   
+          AttributeName: expdate
+          Enabled: true
